@@ -30,7 +30,7 @@ async def process_start_command(message: types.Message):
     try:
         conn = sqlite3.connect('data.db')
         cur = conn.cursor()
-        cur.execute(f'INSERT INTO users (user_id, username) VALUES("{message.from_user.id}", "@{message.from_user.username}")')
+        cur.execute(f'INSERT INTO users (user_id, username, prem) VALUES("{message.from_user.id}", "@{message.from_user.username}", "нет")')
         conn.commit()
     except Exception as e:
         print(e)
@@ -48,9 +48,71 @@ async def process_start_command(message: types.Message):
 async def get_message(message):
     
     if message.text == "💬 Поддержка":
-        await bot.send_message(message.chat.id, text = "*Аналитик, тестировщик проекта Юлия - @vainnner* (по общим вопросам) * \nПрограммист, главный администратор проекта Руслан - @greycatrapper* (по техническим вопросам)", parse_mode='Markdown')
+        await bot.send_message(message.chat.id, text = "*Введите ваше обращение в данной форме: '/sup Обращение'*", parse_mode='Markdown')
+    if message.text == "Оплатил":
+        conn = sqlite3.connect('data.db')
+        cur = conn.cursor()
+        cur.execute(f'INSERT INTO premium (user_id, status) VALUES("{message.from_user.id}", "На рассмотрении")')
+        conn.commit()
+        await bot.send_message(message.chat.id, text = "*Оповещение администратору было отправлено. В скором времени он проверит оплату и выдаст вам Premium!*", parse_mode='Markdown') 
+        conn = sqlite3.connect('data.db')
+        cur = conn.cursor()        
+        cur.execute(f'SELECT * FROM premium WHERE status = "На рассмотрении"')
+        result = cur.fetchall()
+        str_out = ""
+        for i in range(len(result)):
+            date = result[i]
+            str_out += f'\nНомер заявки: {date[0]}\n Айди пользователя: {date[1]}\n Имя пользователя: {message.from_user.first_name} \n'
+        await bot.send_message(2013179813, f'🌯Новая заявка на Premium. Проверьте оплату от пользователя.{str_out}\n Для выдачи премиума пользователю введите "/opl айди заявки"')
+        
+    if message.text == "😎 ШавермаБот Premium":
+        id = message.chat.id
+        await bot.send_message(message.chat.id, f'Вы собираетесь приобрести подписку ШавермаБот Premium!\nС помощью Premium ваши отзывы о шаурмичных всегда будут вверху списка, а также вы получите почётную надпись в личном кабинете!\nТолько до 01.07.2022г. ШавермаБот Premium НАВСЕГДА стоит всего 100 руб. \nРеквизиты для оплаты: \n Сбербанк - 4276522038191047 \n QIWI - +79524117050 \n Комментарий к платежу: {id}\nПосле оплаты напишите "Оплатил"')
     if message.text == "🌯 Рейтинг шаурмичных":
-        await bot.send_message(message.chat.id, text = "*К сожалению, пока что данная функция находится в разработке!*", parse_mode='Markdown')  
+        conn = sqlite3.connect('data.db')
+        cur = conn.cursor()       
+        conn.commit()       
+        cur.execute(f'SELECT * FROM shawarma WHERE status = "Одобрено" ORDER BY rating DESC')
+        result = cur.fetchall()
+        str_out = ""
+        for i in range(len(result)):
+            date = result[i]       
+            str_out += f'🌯Название: {date[1]}. Адрес: {date[3]}. Рейтинг: {date[6]}★ Внутренний номер (для просмотра отзывов): {date[0]}🌯 \n'
+        print(str_out)
+        await bot.send_message(message.chat.id, f'{str_out}')
+    if message.text == "🌯 Подбор шаурмичных":
+        conn = sqlite3.connect('data.db')
+        cur = conn.cursor()       
+        conn.commit()       
+        cur.execute(f'SELECT * FROM users WHERE user_id = {message.chat.id}')
+        result = cur.fetchall()
+        latitude = result[0][2]
+        longitude = result[0][3]
+        if latitude > 0: 
+            conn = sqlite3.connect('data.db')
+            cur = conn.cursor()       
+            conn.commit()       
+            cur.execute(f'SELECT * FROM shawarma WHERE status = "Одобрено" ORDER BY rating DESC')
+            result = cur.fetchall()
+            str_out = ""
+            await bot.send_message(message.chat.id, text = "*Определяем ближайшие шаурмичные к вам!*", parse_mode='Markdown') 
+            shawa_cnt = 0
+            for i in range(len(result)):
+                date = result[i]
+                coordinates = date[2][1:].split(", ")
+                coordinates[1] = coordinates[1][:-1]
+                print(float(coordinates[0]), float(coordinates[1]))
+                print(latitude, longitude)
+                if (abs(latitude - float(coordinates[0])) < 0.009) or (abs(float(coordinates[0]) - latitude) < 0.009) or (abs(longitude - float(coordinates[0])) < 0.009) or (abs(float(coordinates[0]) - longitude) < 0.009):
+                    shawa_cnt += 1
+                    str_out += f'🌯Название: {date[1]}. Адрес: {date[3]}. Рейтинг: {date[6]}★ Внутренний номер (для просмотра отзывов): {date[0]}🌯 \n'
+            if shawa_cnt > 0:
+                await bot.send_message(message.chat.id, f'{str_out}')
+            else:
+                await bot.send_message(message.chat.id, "К сожалению, в радиусе 2км шаурмичных из базы нашего бота не обнаружено")
+        else: 
+            await bot.send_message(message.chat.id, "*Пожалуйста, определите вашу геолокацию по кнопке 'Определить геолокацию'*")
+        
     if message.text == "🧑 Личный кабинет":
         conn = sqlite3.connect('data.db')
         cur = conn.cursor()      
@@ -63,7 +125,133 @@ async def get_message(message):
             geostr = ""
         else:
             geostr = f'🧑Ваша геолокация: {list(result[0])[2]}, {list(result[0])[3]}🧑'
-        await bot.send_message(message.chat.id, f'🧑Ваше имя: {message.from_user.first_name}🧑\n🧑Ваш Telegram ID: {list(result[0])[0]}🧑\n{geostr}')
+        await bot.send_message(message.chat.id, f'🧑Ваше имя: {message.from_user.first_name}🧑\n🧑Ваш Telegram ID: {list(result[0])[0]}🧑\n{geostr}\n😎Premium: {list(result[0])[4]}😎 ')
+    if message.text == "🌯 Добавить шаурмичную":
+        await bot.send_message(message.chat.id, text = "*Пришлите, пожалуйста геолокацию шаурмичной по кнопке 'Определить геолокацию'*", parse_mode='Markdown')
+    if message.text == "💬 Добавить отзыв":
+        await bot.send_message(message.chat.id, text = "*Отправьте, пожалуйста, ваш отзыв в данной форме: '/add Внутренний номер шаурмичной / Оценка (от 1 до 5 ★) / Текст отзыва' \nВнутренний номер смотрите в рейтинге шаурмичных.*", parse_mode='Markdown')
+    if message.text == "💬 Просмотр отзывов":
+        await bot.send_message(message.chat.id, text = "*Введите '/view Внутренний номер шаурмичной'\nВнутренний номер смотрите в рейтинге шаурмичных.*", parse_mode='Markdown')
+    
+        
+        
+    if "/new" in message.text:
+        message_info = message.text[5:]
+        if len(message_info) > 1:
+            message_arr = message_info.split(" / ")
+            name = message_arr[0]
+            address = message_arr[1]            
+            conn = sqlite3.connect('data.db')
+            cur = conn.cursor()      
+
+            cur.execute(f'SELECT * FROM shawarma WHERE user_id = "{message.chat.id}" ORDER BY vn_num DESC LIMIT 1')
+            result = cur.fetchall()
+            print(result)
+            
+            conn = sqlite3.connect('data.db')
+            cur = conn.cursor()
+            cur.execute(f'UPDATE shawarma SET name = "{name}", address = "{address}" WHERE vn_num = "{result[0][0]}"')
+            conn.commit()
+            
+            cur.execute(f'SELECT * FROM shawarma WHERE status = "На модерации"')
+            result = cur.fetchall()
+            str_out = ""
+            for i in range(len(result)):
+                date = result[i]
+                str_out += f'{date[0]}. {date[1]}. {date[3]} \n'
+            print(str_out)
+            await bot.send_message(message.chat.id, text = "*Шаурмичная успешно отправлена на модерацию. При успешном одобрении администратором она появится в каталоге в течение 24 часов. *", parse_mode='Markdown')  
+            await bot.send_message(2013179813, f'🌯Новая заявка на добавление шаурмичной🌯 \n{str_out}Введите "/approve айди шаурмичной", чтобы одобрить шаурмичную')
+            await bot.send_message(919654490, f'🌯Новая заявка на добавление шаурмичной🌯 \n{str_out}Введите "/approve айди шаурмичной", чтобы одобрить шаурмичную')                  
+        else:
+            await bot.send_message(message.chat.id, text = "*Вы не ввели данные о шаурмичной.*", parse_mode='Markdown')  
+    if "/approve" in message.text:
+        if message.chat.id == 2013179813 or message.chat.id == 919654490:      
+            message_info = message.text[9:]
+            conn = sqlite3.connect('data.db')
+            cur = conn.cursor()
+            cur.execute(f'UPDATE shawarma SET status = "Одобрено" WHERE vn_num = "{message_info}"')
+            conn.commit()
+            await bot.send_message(message.chat.id, f'🌯Шаурмичная успешно одобрена🌯')
+        else: 
+             await bot.send_message(message.chat.id, f'Вы не являетесь администратором.')
+    if "/opl" in message.text:
+        message_info = message.text[5:]
+        if message.chat.id == 2013179813 or message.chat.id == 919654490:                  
+            conn = sqlite3.connect('data.db')
+            cur = conn.cursor()
+            cur.execute(f'UPDATE premium SET status = "Одобрено" WHERE id_zayavki = "{message_info}"')           
+            conn.commit()
+            await bot.send_message(message.chat.id, f'🌯Премиум успешно выдан🌯')
+        else: 
+             await bot.send_message(message.chat.id, f'Вы не являетесь администратором.')
+    if "/sup" in message.text:
+        message_info = message.text[5:]
+        if len(message_info) > 1:
+            conn = sqlite3.connect('data.db')
+            cur = conn.cursor()
+            cur.execute(f'INSERT INTO support (user_name, appeal, sup_status) VALUES("@{message.from_user.username}", "{message_info}", "На рассмотрении")')
+            conn.commit()           
+            cur.execute(f'SELECT * FROM support WHERE sup_status = "На рассмотрении"')
+            result = cur.fetchall()
+            str_out = ""
+            for i in range(len(result)):
+                date = result[i]
+                str_out += f'{date[0]}. {date[1]}. {date[2]} \n'
+            print(str_out)
+            await bot.send_message(message.chat.id, f'🧑 Ваше обращение успешно зарегистрировано. В течение 24 часов с вами свяжется администратор.')
+            await bot.send_message(2013179813, f'🧑 Новое обращение🧑 \n{str_out}\n Для того, чтобы пометить обращение, как рассмотренное, введите "/rev номер обращения"')
+            await bot.send_message(919654490, f'🧑 Новое обращение🧑 \n{str_out}\n Для того, чтобы пометить обращение, как рассмотренное, введите "/rev номер обращения"')
+        else:
+            await bot.send_message(message.chat.id, f'🧑 Вы не ввели обращение.')
+    if "/rev" in message.text:
+        if message.chat.id == 2013179813 or message.chat.id == 919654490:
+            message_info = message.text[5:]
+            conn = sqlite3.connect('data.db')
+            cur = conn.cursor()
+            cur.execute(f'UPDATE support SET sup_status = "Рассмотрено" WHERE sup_id = "{message_info}"')
+            conn.commit()
+            await bot.send_message(message.chat.id, f'🧑Обращение успешно помечено рассмотренным🧑')
+        else:
+            await bot.send_message(message.chat.id, f'🧑Вы не являетесь администратором.🧑')
+        
+    if "/add" in message.text:
+        message_inform = message.text[5:]
+        if len(message_inform)> 1: 
+            message_arr = message_inform.split(" / ")
+            vn_nom = message_arr[0]
+            score = int(message_arr[1])
+            review = message_arr[2]      
+            conn = sqlite3.connect('data.db')
+            cur = conn.cursor()
+            cur.execute(f'SELECT * FROM shawarma WHERE vn_num = {vn_nom}')
+            result = cur.fetchall()
+            rate = result[0][6]
+            rate_itog = (rate + score) / 2
+            cur.execute(f'UPDATE shawarma SET rating = {rate_itog} WHERE vn_num = {vn_nom}')
+            cur.execute(f'INSERT INTO reviews (name, vn_nom, score, review, user_id) VALUES ("{message.from_user.first_name}", "{vn_nom}", "{score}", "{review}", "{message.chat.id}")')
+            result = cur.fetchall()
+            print(result)
+            conn.commit()
+            await bot.send_message(message.chat.id, text = "*Ваш отзыв успешно оставлен! Спасибо!*", parse_mode='Markdown')
+        else:
+            await bot.send_message(message.chat.id, text = "*Вы не ввели отзыв.*", parse_mode='Markdown')
+    if "/view" in message.text:
+        message_info = message.text[6:]
+        if len(message_info) > 0:                       
+            conn = sqlite3.connect('data.db')
+            cur = conn.cursor()              
+            cur.execute(f'SELECT * FROM reviews WHERE vn_nom = "{message_info}"')
+            result = cur.fetchall()
+            conn.commit()  
+            str_out = ""
+            for i in range(len(result)):
+                date = result[i]
+                str_out += f'Имя: {date[1]}. Оценка: {date[3]}★. Текст отзыва: {date[4]}.  \n'
+            print(str_out)
+            await bot.send_message(message.chat.id, f'{str_out}')
+        else:
+            await bot.send_message(message.chat.id, text = "*Вы не ввели параметры отзыва.*", parse_mode='Markdown')
         
          
  
@@ -73,15 +261,31 @@ async def get_message(message):
     latitude = message.location.latitude
     longitude = message.location.longitude
     
-    try:
+    coordinates = latitude, longitude
+    
+    conn = sqlite3.connect('data.db')
+    cur = conn.cursor()      
+
+    cur.execute(f'SELECT * FROM users WHERE user_id = "{message.chat.id}" AND latitude > 0')
+    result = cur.fetchall()
+    
+    if len(result) > 0:
         conn = sqlite3.connect('data.db')
         cur = conn.cursor()
-        cur.execute(f'UPDATE users SET longitude = "{longitude}", latitude = "{latitude}" WHERE user_id = "{message.chat.id}"')
+        cur.execute(f'INSERT INTO shawarma (coordinates, status, user_id) VALUES ("{coordinates}", "На модерации", "{message.chat.id}")')
         conn.commit()
-        await bot.send_message(message.chat.id, text = "*Ваша геолокация успешно добавлена в базу данных!*", parse_mode='Markdown') 
-    except Exception as e:
-        print(e)
+        await bot.send_message(message.chat.id, text = "* Введите '/new название шаурмичной / адрес шаурмичной', чтобы добавить информацию*", parse_mode='Markdown')  
+    else:
+        try:
+            conn = sqlite3.connect('data.db')
+            cur = conn.cursor()
+            cur.execute(f'UPDATE users SET longitude = "{longitude}", latitude = "{latitude}" WHERE user_id = "{message.chat.id}"')
+            conn.commit()
+            await bot.send_message(message.chat.id, text = "*Ваша геолокация успешно добавлена в базу данных!*", parse_mode='Markdown') 
+        except Exception as e:
+            print(e)
     
+  
     
    
 
